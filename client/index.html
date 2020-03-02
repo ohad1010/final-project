@@ -1,0 +1,83 @@
+<canvas id="ctx" width="1500" height="800" style="border:1px solid #000000;"></canvas>
+<script src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
+<script>
+    var socket = io();
+    var canvas = document.getElementById("ctx")
+    var ctx = canvas.getContext("2d");
+    ctx.font = '30px Arial';
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    socket.emit('sortToPartners');
+    
+        
+    socket.on('newPositions',function(data){
+        console.log("hey")
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        for(var i = 0 ; i < data.length; i++){
+            var img = new Image();
+            img.src = data[i].imgSrc;
+            ctx.drawImage(img,data[i].x, data[i].y, data[i].width, data[i].height); 
+            if (data[i].type === "laser" && data[i].y < 50){
+                socket.emit('laserDelete',{inputId:data[i].id})
+            }
+        }  
+        for(var i = 0 ; i < data.length; i++){
+            if(data[i].type === "laser"){
+                for(var j =0 ; j < data.length; j++){
+                if(data[j].type === "ghost")
+                    if(isCollide(data[i],data[j])){
+                        socket.emit('laserDelete',{inputId:data[i].id})
+                        socket.emit('ghostDelete',{inputId2:data[j].id})
+                        console.log(data[j].id)
+                    }
+                }
+            }
+        }   
+    });
+
+   
+
+    socket.on('lost',function(){
+        window.location.replace("/entry.html");
+    })
+    socket.on('waitingGame',function(){
+            ctx.clearRect(0,0,1500,800);
+            ctx.fillText('waiting...',700,400);  
+    })
+
+    document.onkeydown = function(event){
+        if(event.keyCode === 68)    //d
+            socket.emit('keyPress',{inputId:'right',state:true});
+        else if(event.keyCode === 83)   //s
+            socket.emit('keyPress',{inputId:'down',state:true});
+        else if(event.keyCode === 65) //a
+            socket.emit('keyPress',{inputId:'left',state:true});
+        else if(event.keyCode === 87) // w
+            socket.emit('keyPress',{inputId:'up',state:true});
+        else if (event.keyCode === 32) //space
+            socket.emit('laserCreate',)
+            
+    }
+    document.onkeyup = function(event){
+        if(event.keyCode === 68)    //d
+            socket.emit('keyPress',{inputId:'right',state:false});
+        else if(event.keyCode === 83)   //s
+            socket.emit('keyPress',{inputId:'down',state:false});
+        else if(event.keyCode === 65) //a
+            socket.emit('keyPress',{inputId:'left',state:false});
+        else if(event.keyCode === 87) // w
+            socket.emit('keyPress',{inputId:'up',state:false});
+    }
+
+    function isCollide(a, b) {
+        return !(
+            ((a.y + a.height) < (b.y)) ||
+            (a.y > (b.y + b.height)) ||
+            ((a.x + a.width) < b.x) ||
+            (a.x > (b.x + b.width))
+    );
+}
+ 
+    
+</script>
