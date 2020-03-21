@@ -1,16 +1,7 @@
 var MongoClient = require('mongodb').MongoClient;
 var url = "mongodb://localhost:27017/mydb";
 
-
 var express = require('express');
-var session = require('express-session');
-var bodyParser = require('body-parser');
-var redis = require('redis');
-var redisClient = redis.createClient(6379, '127.0.0.1');
-var redisStore = require('connect-redis')(session);
-
-var client = redis.createClient();
-var router = express.Router();
 var app = express();
 var serv = require('http').Server(app);
 var cookieParser = require('cookie-parser');
@@ -101,7 +92,7 @@ let USERS = {
 
 
 
-var Sprite = function(x, y, type, imgSrc,  width, height, id, direction){
+var Sprite = function(x, y, type, imgSrc,  width, height, id, direction, row, line){
     var self = {
         x:x,
         y:y,
@@ -111,6 +102,9 @@ var Sprite = function(x, y, type, imgSrc,  width, height, id, direction){
         type:type,
         imgSrc:imgSrc,
         direction:direction,
+        row:row,
+        line:line,
+        counter:0,
     }
     self.updatePosition = function(){
         self.y -= 10;
@@ -133,7 +127,7 @@ var Player = function(x, id,imgSrc, width, height, playNum){
         pressingUp:false,
         pressingDown:false,
         maxSpd:5,
-        SPRITE_LIST:[],
+        counter:0,
         
     }
     self.updatePosition = function(){
@@ -142,9 +136,7 @@ var Player = function(x, id,imgSrc, width, height, playNum){
         if(self.pressingLeft)
             self.x -= self.maxSpd;
     }
-    self.insertToSprite = function(spr){
-        self.SPRITE_LIST[self.SPRITE_LIST.length] = spr
-    }
+
     return self;
 }
 
@@ -163,37 +155,25 @@ class Pack {
     }
 }
 
-class Partner {
-    constructor(pack1, pack2){
-        this.pack1 = pack1;
-        this.pack2 = pack2;
+
+
+
+var Partner = function(pack1, pack2,){
+    var self = {
+        pack1:pack1,
+        pack2:pack2,
+        SPRITE_LIST:[],
+     
     }
 
-    get Pack1(){
-        return this.pack1;
+    self.insertToSprite = function(spr){
+        self.SPRITE_LIST[self.SPRITE_LIST.length] = spr
     }
-
-    get Pack2(){
-        return this.pack2;
-    }
-
-    set sPack1(value) {
-        this._pack1 = value;
-    }
-
-    set sPack2(value1) {
-        this._pack2 = value1;
-      }
-
-    delpack1(){
-        this._pack1 = null;
-    }
-
-    delpack2(){
-        this._pack2 = null;
-    }
-   
+    return self;
 }
+
+
+
 
 var io = require('socket.io')(serv,{});
 io.sockets.on('connection', function(socket){
@@ -210,10 +190,6 @@ io.sockets.on('connection', function(socket){
                     if(result[i].name==myobj.name && result[i].password == myobj.password){
                         truecredentials = true;
                     }
-                }
-
-                if (truecredentials){
-                    
                 }
                 socket.emit('signInResponse',{success:truecredentials});
             })
@@ -253,7 +229,7 @@ io.sockets.on('connection', function(socket){
             var player = Player( 500,socket.id, '/spaceship1.jpg', 100, 100,1);
             PLAYER_LIST[socket.id] = player;
             newPack = new Pack(socket, player);
-            PARTNERS_LIST[0] = new Partner(newPack, null);
+            PARTNERS_LIST[0] = Partner(newPack, null);
             partnerId = 0;
             numPack = 0;
         }
@@ -272,30 +248,17 @@ io.sockets.on('connection', function(socket){
             PLAYER_LIST[socket.id] = player;
             newPack = new Pack(socket, player);
             partnerId = PARTNERS_LIST.length;
-            PARTNERS_LIST[PARTNERS_LIST.length] =new Partner(newPack, null);
-           
+            PARTNERS_LIST[PARTNERS_LIST.length] =Partner(newPack, null);
             numPack = 0;
         }
-        
-        socket.on('insertToDatabase',function(data){
-        const MongoClient = require('mongodb').MongoClient;
-        const uri = "mongodb+srv://ohad_abramovitch:kPqWA9G5TTZLz3wK@spaceinv-u8jem.azure.mongodb.net/test?retryWrites=true&w=majority";
-        const client = new MongoClient(uri, { useNewUrlParser: true , useUnifiedTopology: true });
-        client.connect(err => {
-            const collection = client.db("users").collection("main");
-            collection.insertOne(
-                { name: "itay"}
-            )
-        client.close();
-        });
     
     });
     
     
         
         socket.on('laserCreate',function(){
-            var laser = Sprite(player.x,600,"laser",'/laser.jpg', 100, 100, player.SPRITE_LIST.length)
-            player.insertToSprite(laser)
+            var laser = Sprite(player.x,600,"laser",'/laser.jpg', 100, 100, partnering.SPRITE_LIST.length)
+            partnering.insertToSprite(laser)
         })
        
         socket.on('keyPress',function(data){
@@ -310,67 +273,97 @@ io.sockets.on('connection', function(socket){
         });
     
         socket.on('laserDelete',function(data){
-            delete player.SPRITE_LIST[data.inputId]
+            delete partnering.SPRITE_LIST[data.inputId]
         })
     
-        socket.on('ghostDelete',function(data){  
-            delete player.SPRITE_LIST[data.inputId2]
+        socket.on('ghostDelete',function(data){ 
+            partnering.aliveGhosts--;
+            console.log(partnering.aliveGhosts);
+            delete partnering.SPRITE_LIST[data.inputId2];
+            
+            
         })
     
         function createGhosts(){
             for (var i = 0 ; i < 3 ; i++){
-                for (var j = 0 ; j < 10 ; j++){
-                    var Ghost = Sprite(300 + 100*j,100 + 100*i,"ghost",'/ghost.png', 75, 75, player.SPRITE_LIST.length, 'right');
-                    player.insertToSprite(Ghost);
+                for (var j = 0 ; j < 9 ; j++){
+                    var Ghost = Sprite(300 + 100*j,100 + 100*i,"ghost",'/ghost.png', 75, 75, partnering.SPRITE_LIST.length, 'right', i, j);
+                    partnering.insertToSprite(Ghost);
                 }
             }
-            
+   
         }
     
+
+
+
+
+
         function updateGhostPosition(){
-            for (var i = 0 ; i<player.SPRITE_LIST.length ; i++){
-                if (player.SPRITE_LIST[i] != null){
-                    if(player.SPRITE_LIST[i].type == "ghost"){
-                        if (player.SPRITE_LIST[i].x <= 100){moveLineDown("right");}
-                        else if (player.SPRITE_LIST[i].x >= 1400){moveLineDown("left")}
+            var outofboundaries = false;
+            var direc;
+            var endgame = true;
+            for (var i = 0 ; i<partnering.SPRITE_LIST.length ; i++){
+                if (partnering.SPRITE_LIST[i] != null){
+                    if(partnering.SPRITE_LIST[i].type == "ghost"){
+                        endgame = false;
                     }
-                
-                if(player.SPRITE_LIST[i].type == "ghost"){
-                    if (player.SPRITE_LIST[i].y >= 650){
-                        player.gameActive = false;
-                        break;
-                    }
-                }
-                if(player.SPRITE_LIST[i].type == "ghost"){
-                    temp = player.SPRITE_LIST[i];
-                    if (temp.direction == "right" ){ 
-                        temp.x += 50;
-                    }
-                    else if (temp.direction == "left" ){
-                        temp.x -= 50;
-                    }      
                 }
             }
-        }
+            if (endgame == true){
+                player.gameActive = false;
+            }
+            for (var i = 0 ; i<partnering.SPRITE_LIST.length ; i++){
+                if (partnering.SPRITE_LIST[i] != null){
+                    if(partnering.SPRITE_LIST[i].type == "ghost"){
+                        if (partnering.SPRITE_LIST[i].y >= 650){
+                            player.gameActive = false;
+                            break;
+                        }
+                        if(partnering.SPRITE_LIST[i].x <= 100){
+                            outofboundaries = true;
+                            direc = "right";
+                        }
+                        if(partnering.SPRITE_LIST[i].x >= 1400){
+                            outofboundaries = true;
+                            direc = "left";
+                        }
+
+
+                        }
+                }
+                   }  
+                for (var i = 0 ; i<partnering.SPRITE_LIST.length ; i++){
+                    if (partnering.SPRITE_LIST[i] != null ){
+                        if(partnering.SPRITE_LIST[i].type == "ghost"){
+                        if (outofboundaries && direc == "left"){
+                            partnering.SPRITE_LIST[i].y += 25;
+                            partnering.SPRITE_LIST[i].x -= 50
+                            partnering.SPRITE_LIST[i].direction = "left";
+                        }
+                        else if (outofboundaries && direc == "right"){
+                            partnering.SPRITE_LIST[i].y += 25;
+                            partnering.SPRITE_LIST[i].x += 50
+                            partnering.SPRITE_LIST[i].direction = "right";
+                        }
+                        else{
+                            if (partnering.SPRITE_LIST[i].direction == "right" ){ 
+                                partnering.SPRITE_LIST[i].x += 50;
+                            }
+                             if (partnering.SPRITE_LIST[i].direction == "left" ){
+                                partnering.SPRITE_LIST[i].x -= 50;
+                            }
+                        }
+                    }
+                    }
+                }
+            
+   
             setTimeout(updateGhostPosition, 500);
         }
     
-        function moveLineDown(direc){
-            for (var j = 0 ; j < player.SPRITE_LIST.length ; j++){
-                if (player.SPRITE_LIST[j] != null){
-                    if (player.SPRITE_LIST[j].type == "ghost"){
-                        temp = player.SPRITE_LIST[j];
-                        temp.y += 25;
-                        temp.direction = direc;
-                    }
-                
-                }
-            }
-        }
-    
-    
+     
     });
-    
     });
      
     
@@ -379,15 +372,18 @@ io.sockets.on('connection', function(socket){
         for(var i in PARTNERS_LIST){
             if (PARTNERS_LIST[i] != null){
                 pack = [];
-                if (PARTNERS_LIST[i].Pack1 != null && PARTNERS_LIST[i].Pack2 != null){
+                if (PARTNERS_LIST[i].pack1 != null && PARTNERS_LIST[i].pack2 != null){
+                    if (PARTNERS_LIST[i].SPRITE_LIST.length === 0){
+                        console.log("hey");
+                    }
                     if (PARTNERS_LIST[i].pack1.player.gameActive==false || PARTNERS_LIST[i].pack2.player.gameActive==false){
                         PARTNERS_LIST[i].pack1.socket.emit("lost",)
                         PARTNERS_LIST[i].pack2.socket.emit("lost",)
                         delete PARTNERS_LIST[i]
-    
                     }
+
                     else{
-                    var player1 = PARTNERS_LIST[i].Pack1;
+                    var player1 = PARTNERS_LIST[i].pack1;
                     player1.player.updatePosition();
                     pack.push({
                         x:player1.player.x,
@@ -397,7 +393,7 @@ io.sockets.on('connection', function(socket){
                         width: player1.player.width,
                             
                     })
-                    var spr_lst = player1.player.SPRITE_LIST
+                    var spr_lst = PARTNERS_LIST[i].SPRITE_LIST
                     for (var j in spr_lst){
                         if (spr_lst[j] != null){
                             spr1 = spr_lst[j];
@@ -413,23 +409,8 @@ io.sockets.on('connection', function(socket){
                             })
                         }
                     }
-                    var player2 = PARTNERS_LIST[i].Pack2;
-                    var spr_lst2 = player2.player.SPRITE_LIST
-                    for (var j in spr_lst2){
-                        if (spr_lst2[j] != null){
-                            spr2 = spr_lst2[j];
-                            if (spr2.type == 'laser'){spr2.updatePosition();}
-                            pack.push({
-                                x:spr2.x,
-                                y:spr2.y,
-                                imgSrc:spr2.imgSrc,
-                                height:spr2.height,
-                                width:spr2.width,
-                                type:spr2.type,
-                                id:spr2.id,
-                            })
-                        }
-                    }
+                    var player2 = PARTNERS_LIST[i].pack2;
+                  
                     player2.player.updatePosition();
                     pack.push({
                         x:player2.player.x,
@@ -445,13 +426,13 @@ io.sockets.on('connection', function(socket){
                     player2.socket.emit('newPositions',pack)
                     }
                 }
-                    else if (PARTNERS_LIST[i].Pack2 == null){
-                        var player1 = PARTNERS_LIST[i].Pack1;
+                    else if (PARTNERS_LIST[i].pack2 == null){
+                        var player1 = PARTNERS_LIST[i].pack1;
                         player1.socket.emit('waitingGame',)
                         
                     }
                     else{
-                        var player2 = PARTNERS_LIST[i].Pack2;
+                        var player2 = PARTNERS_LIST[i].pack2;
                         player2.socket.emit('waitingGame',)
                     }
             
