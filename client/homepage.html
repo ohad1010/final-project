@@ -1,0 +1,30 @@
+<button onclick="location.href='entry.html'" type="button" id='entr'>sign-in/sign-up</button>
+<button onclick="location.href='index.html'" type="button" id='inde'>game</button>
+<button onclick="" type="button" id='sig'>sign out</button>
+
+<script>
+function getCookie(name) {
+        var value = "; " + document.cookie;
+        var parts = value.split("; " + name + "=");
+        if (parts.length == 2) return parts.pop().split(";").shift();
+} 
+
+if (getCookie('loggedIn') === 'true'){
+    document.getElementById("entr").disabled = true;
+    document.getElementById("inde").disabled = false;
+    document.getElementById("sig").disabled = false;
+}
+
+else if (getCookie('loggedIn') === 'false'){
+    document.getElementById("entr").disabled = false;
+    document.getElementById("inde").disabled = true;
+    document.getElementById("sig").disabled = true;
+}
+
+document.getElementById('sig').onclick = function(){
+    console.log('hey');
+    document.cookie = 'loggedIn = false;';
+    location.reload();
+}
+
+</script>
